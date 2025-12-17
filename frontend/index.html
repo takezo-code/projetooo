@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kanban Auth</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Auth Section -->
+    <section id="auth-section" class="auth-container">
+      <h1>🔐 Kanban Auth</h1>
+      
+      <div class="tabs">
+        <button class="tab active" data-tab="login">Login</button>
+        <button class="tab" data-tab="register">Registrar</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" class="form">
+        <input type="email" id="login-email" placeholder="Email" required>
+        <input type="password" id="login-password" placeholder="Senha" required>
+        <button type="submit">Entrar</button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" class="form hidden">
+        <input type="text" id="register-name" placeholder="Nome" required>
+        <input type="email" id="register-email" placeholder="Email" required>
+        <input type="password" id="register-password" placeholder="Senha (min 6)" required>
+        <select id="register-role">
+          <option value="MEMBER">Membro</option>
+          <option value="ADMIN">Admin</option>
+        </select>
+        <button type="submit">Registrar</button>
+      </form>
+
+      <p id="auth-error" class="error"></p>
+    </section>
+
+    <!-- Kanban Section -->
+    <section id="kanban-section" class="hidden">
+      <header>
+        <h1>📋 Kanban Board</h1>
+        <div class="user-info">
+          <span id="user-name"></span>
+          <span id="user-role" class="badge"></span>
+          <button id="logout-btn">Sair</button>
+        </div>
+      </header>
+
+      <!-- Create Task (Admin only) -->
+      <div id="create-task-section" class="create-task hidden">
+        <h3>Nova Task</h3>
+        <form id="create-task-form">
+          <input type="text" id="task-title" placeholder="Título" required>
+          <input type="text" id="task-description" placeholder="Descrição">
+          <select id="task-assigned">
+            <option value="">Sem atribuição</option>
+          </select>
+          <button type="submit">Criar</button>
+        </form>
+      </div>
+
+      <!-- Kanban Board -->
+      <div class="board">
+        <div class="column" data-status="BACKLOG">
+          <h2>📥 Backlog</h2>
+          <div class="tasks" id="backlog-tasks"></div>
+        </div>
+        <div class="column" data-status="IN_PROGRESS">
+          <h2>🔄 Em Progresso</h2>
+          <div class="tasks" id="in_progress-tasks"></div>
+        </div>
+        <div class="column" data-status="REVIEW">
+          <h2>👀 Review</h2>
+          <div class="tasks" id="review-tasks"></div>
+        </div>
+        <div class="column" data-status="DONE">
+          <h2>✅ Done</h2>
+          <div class="tasks" id="done-tasks"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
