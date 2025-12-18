@@ -1,4 +1,5 @@
 import express, { Application } from 'express';
+import cors from 'cors';
 import { errorHandler } from './shared/middlewares/errorHandler';
 import { authRoutes } from './routes/auth.routes';
 import { taskRoutes } from './routes/task.routes';
@@ -12,6 +13,7 @@ export function createApp(): Application {
   const app = express();
 
   // ==================== MIDDLEWARES GLOBAIS ====================
+  app.use(cors());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 

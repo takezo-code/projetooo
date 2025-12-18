@@ -1,4 +1,4 @@
-import { getDatabase } from '../shared/database/connection';
+import { getDatabase, saveDatabase } from '../shared/database/connection';
 import { Task } from '../entities/Task.entity';
 import { TaskDTO } from '../dtos/task/TaskDTO';
 import { ITaskRepository } from '../interfaces/repositories/ITaskRepository';
@@ -6,13 +6,12 @@ import { TaskMapper } from '../mappers/task.mapper';
 
 /**
  * Implementação do Repository de Tasks
- * Implementa ITaskRepository
+ * Usa sql.js
  */
 export class TaskRepository implements ITaskRepository {
-  private db = getDatabase();
-
   findAll(): TaskDTO[] {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    const results = db.exec(`
       SELECT 
         t.id,
         t.title,
@@ -30,11 +29,19 @@ export class TaskRepository implements ITaskRepository {
       ORDER BY t.created_at DESC
     `);
 
-    return stmt.all().map((data: any) => TaskMapper.toDTO(data));
+    if (!results.length) return [];
+
+    const columns = results[0].columns;
+    return results[0].values.map(row => {
+      const obj: any = {};
+      columns.forEach((col, i) => obj[col] = row[i]);
+      return TaskMapper.toDTO(obj);
+    });
   }
 
   findById(id: number): TaskDTO | undefined {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    const stmt = db.prepare(`
       SELECT 
         t.id,
         t.title,
@@ -51,13 +58,20 @@ export class TaskRepository implements ITaskRepository {
       LEFT JOIN users creator ON t.created_by = creator.id
       WHERE t.id = ?
     `);
+    stmt.bind([id]);
 
-    const data = stmt.get(id) as any;
-    return data ? TaskMapper.toDTO(data) : undefined;
+    if (stmt.step()) {
+      const row = stmt.getAsObject();
+      stmt.free();
+      return TaskMapper.toDTO(row);
+    }
+    stmt.free();
+    return undefined;
   }
 
   findByAssignedTo(userId: number): TaskDTO[] {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    const results = db.exec(`
       SELECT 
         t.id,
         t.title,
@@ -72,22 +86,33 @@ export class TaskRepository implements ITaskRepository {
       FROM tasks t
       LEFT JOIN users assigned ON t.assigned_to = assigned.id
       LEFT JOIN users creator ON t.created_by = creator.id
-      WHERE t.assigned_to = ?
+      WHERE t.assigned_to = ${userId}
       ORDER BY t.created_at DESC
     `);
 
-    return stmt.all(userId).map((data: any) => TaskMapper.toDTO(data));
+    if (!results.length) return [];
+
+    const columns = results[0].columns;
+    return results[0].values.map(row => {
+      const obj: any = {};
+      columns.forEach((col, i) => obj[col] = row[i]);
+      return TaskMapper.toDTO(obj);
+    });
   }
 
   create(title: string, description: string | null, createdBy: number, assignedTo: number | null): Task {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    db.run(`
       INSERT INTO tasks (title, description, created_by, assigned_to, status)
       VALUES (?, ?, ?, ?, 'BACKLOG')
-    `);
+    `, [title, description, createdBy, assignedTo]);
 
-    const result = stmt.run(title, description, createdBy, assignedTo);
-    
-    const taskDTO = this.findById(result.lastInsertRowid as number);
+    saveDatabase();
+
+    const result = db.exec('SELECT last_insert_rowid() as id');
+    const lastId = result[0].values[0][0] as number;
+
+    const taskDTO = this.findById(lastId);
     if (!taskDTO) {
       throw new Error('Falha ao criar task');
     }
@@ -96,38 +121,37 @@ export class TaskRepository implements ITaskRepository {
   }
 
   update(id: number, title: string, description: string | null, assignedTo: number | null): void {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    db.run(`
       UPDATE tasks
       SET title = ?, description = ?, assigned_to = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `);
-
-    stmt.run(title, description, assignedTo, id);
+    `, [title, description, assignedTo, id]);
+    saveDatabase();
   }
 
   updateStatus(id: number, status: string): void {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    db.run(`
       UPDATE tasks
       SET status = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `);
-
-    stmt.run(status, id);
+    `, [status, id]);
+    saveDatabase();
   }
 
   delete(id: number): void {
-    const stmt = this.db.prepare(`
-      DELETE FROM tasks WHERE id = ?
-    `);
-
-    stmt.run(id);
+    const db = getDatabase();
+    db.run(`DELETE FROM tasks WHERE id = ?`, [id]);
+    saveDatabase();
   }
 
   userExists(userId: number): boolean {
-    const stmt = this.db.prepare(`
-      SELECT id FROM users WHERE id = ?
-    `);
-
-    return stmt.get(userId) !== undefined;
+    const db = getDatabase();
+    const stmt = db.prepare(`SELECT id FROM users WHERE id = ?`);
+    stmt.bind([userId]);
+    const exists = stmt.step();
+    stmt.free();
+    return exists;
   }
 }

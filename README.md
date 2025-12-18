@@ -95,33 +95,154 @@ JWT_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
 ```
 
-## 📡 Endpoints
+## 📡 Endpoints da API
 
-### Auth
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| POST | `/api/auth/register` | Registrar usuário |
-| POST | `/api/auth/login` | Login |
-| POST | `/api/auth/refresh` | Renovar tokens |
-| POST | `/api/auth/logout` | Logout |
+### 🔐 Autenticação
 
-### Tasks
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/tasks` | Listar tasks |
-| GET | `/api/tasks/:id` | Buscar task |
-| POST | `/api/tasks` | Criar task (ADMIN) |
-| PUT | `/api/tasks/:id` | Atualizar task (ADMIN) |
-| PATCH | `/api/tasks/:id/move` | Mover task |
-| DELETE | `/api/tasks/:id` | Deletar task (ADMIN) |
+#### POST `/api/auth/register`
+Registrar novo usuário.
 
-### Users
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/users` | Listar usuários (ADMIN) |
-| GET | `/api/users/:id` | Buscar usuário |
-| PUT | `/api/users/:id` | Atualizar usuário (ADMIN) |
-| DELETE | `/api/users/:id` | Deletar usuário (ADMIN) |
+**Body:**
+```json
+{
+  "name": "João Silva",
+  "email": "joao@email.com",
+  "password": "senha123",
+  "role": "MEMBER" // opcional, padrão: MEMBER
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "user": { "id": 1, "name": "João Silva", "email": "joao@email.com", "role": "MEMBER" },
+    "accessToken": "eyJhbGc...",
+    "refreshToken": "eyJhbGc..."
+  }
+}
+```
+
+#### POST `/api/auth/login`
+Fazer login.
+
+**Body:**
+```json
+{
+  "email": "joao@email.com",
+  "password": "senha123"
+}
+```
+
+**Response:** Mesmo formato do register.
+
+#### POST `/api/auth/refresh`
+Renovar access token usando refresh token.
+
+**Body:**
+```json
+{
+  "refreshToken": "eyJhbGc..."
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "accessToken": "novo_token...",
+    "refreshToken": "novo_refresh_token..."
+  }
+}
+```
+
+#### POST `/api/auth/logout`
+Revogar refresh token.
+
+**Body:**
+```json
+{
+  "refreshToken": "eyJhbGc..."
+}
+```
+
+---
+
+### 📋 Tasks
+
+Todas as rotas de tasks requerem autenticação (`Authorization: Bearer <token>`).
+
+#### GET `/api/tasks`
+Listar tasks. ADMIN vê todas, MEMBER vê apenas as atribuídas a ele.
+
+#### GET `/api/tasks/:id`
+Buscar task por ID.
+
+#### POST `/api/tasks` (ADMIN only)
+Criar nova task.
+
+**Body:**
+```json
+{
+  "title": "Implementar feature X",
+  "description": "Descrição da task",
+  "assignedTo": 2 // opcional
+}
+```
+
+#### PUT `/api/tasks/:id` (ADMIN only)
+Atualizar task.
+
+**Body:**
+```json
+{
+  "title": "Novo título",
+  "description": "Nova descrição",
+  "assignedTo": 3
+}
+```
+
+#### PATCH `/api/tasks/:id/move`
+Mover task entre status. Respeita regras de transição.
+
+**Body:**
+```json
+{
+  "newStatus": "IN_PROGRESS"
+}
+```
+
+#### DELETE `/api/tasks/:id` (ADMIN only)
+Deletar task.
+
+---
+
+### 👥 Users
+
+Todas as rotas de users requerem autenticação.
+
+#### GET `/api/users` (ADMIN only)
+Listar todos os usuários.
+
+#### GET `/api/users/:id`
+Buscar usuário por ID. ADMIN pode ver qualquer um, MEMBER só o próprio.
+
+#### PUT `/api/users/:id` (ADMIN only)
+Atualizar usuário.
+
+**Body:**
+```json
+{
+  "name": "Novo Nome",
+  "email": "novo@email.com",
+  "role": "ADMIN"
+}
+```
+
+#### DELETE `/api/users/:id` (ADMIN only)
+Deletar usuário. Não pode deletar a si mesmo nem o último admin.
 
 ## 🔒 Autenticação
 

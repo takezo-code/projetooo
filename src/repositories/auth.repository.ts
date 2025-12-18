@@ -1,4 +1,4 @@
-import { getDatabase } from '../shared/database/connection';
+import { getDatabase, saveDatabase } from '../shared/database/connection';
 import { User } from '../entities/User.entity';
 import { RefreshToken } from '../entities/RefreshToken.entity';
 import { IAuthRepository } from '../interfaces/repositories/IAuthRepository';
@@ -6,15 +6,14 @@ import { UserMapper } from '../mappers/user.mapper';
 
 /**
  * Implementação do Repository de Autenticação
- * Implementa IAuthRepository
+ * Usa sql.js
  */
 export class AuthRepository implements IAuthRepository {
-  private db = getDatabase();
-
   // ==================== USERS ====================
 
   findUserByEmail(email: string): User | undefined {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    const stmt = db.prepare(`
       SELECT 
         id,
         name,
@@ -26,13 +25,20 @@ export class AuthRepository implements IAuthRepository {
       FROM users
       WHERE email = ?
     `);
+    stmt.bind([email]);
 
-    const data = stmt.get(email) as any;
-    return data ? UserMapper.toEntity(data) : undefined;
+    if (stmt.step()) {
+      const row = stmt.getAsObject();
+      stmt.free();
+      return UserMapper.toEntity(row);
+    }
+    stmt.free();
+    return undefined;
   }
 
   findUserById(id: number): User | undefined {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    const stmt = db.prepare(`
       SELECT 
         id,
         name,
@@ -44,20 +50,31 @@ export class AuthRepository implements IAuthRepository {
       FROM users
       WHERE id = ?
     `);
+    stmt.bind([id]);
 
-    const data = stmt.get(id) as any;
-    return data ? UserMapper.toEntity(data) : undefined;
+    if (stmt.step()) {
+      const row = stmt.getAsObject();
+      stmt.free();
+      return UserMapper.toEntity(row);
+    }
+    stmt.free();
+    return undefined;
   }
 
   createUser(name: string, email: string, passwordHash: string, role: string): User {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    db.run(`
       INSERT INTO users (name, email, password_hash, role)
       VALUES (?, ?, ?, ?)
-    `);
+    `, [name, email, passwordHash, role]);
 
-    const result = stmt.run(name, email, passwordHash, role);
-    
-    const user = this.findUserById(result.lastInsertRowid as number);
+    saveDatabase();
+
+    // Pegar o último ID inserido
+    const result = db.exec('SELECT last_insert_rowid() as id');
+    const lastId = result[0].values[0][0] as number;
+
+    const user = this.findUserById(lastId);
     if (!user) {
       throw new Error('Falha ao criar usuário');
     }
@@ -68,15 +85,19 @@ export class AuthRepository implements IAuthRepository {
   // ==================== REFRESH TOKENS ====================
 
   saveRefreshToken(token: string, userId: number, expiresAt: Date): RefreshToken {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    db.run(`
       INSERT INTO refresh_tokens (token, user_id, expires_at)
       VALUES (?, ?, ?)
-    `);
+    `, [token, userId, expiresAt.toISOString()]);
 
-    const result = stmt.run(token, userId, expiresAt.toISOString());
+    saveDatabase();
+
+    const result = db.exec('SELECT last_insert_rowid() as id');
+    const lastId = result[0].values[0][0] as number;
 
     return new RefreshToken(
-      result.lastInsertRowid as number,
+      lastId,
       token,
       userId,
       expiresAt.toISOString(),
@@ -86,7 +107,8 @@ export class AuthRepository implements IAuthRepository {
   }
 
   findRefreshToken(token: string): RefreshToken | undefined {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    const stmt = db.prepare(`
       SELECT 
         id,
         token,
@@ -97,46 +119,50 @@ export class AuthRepository implements IAuthRepository {
       FROM refresh_tokens
       WHERE token = ?
     `);
+    stmt.bind([token]);
 
-    const data = stmt.get(token) as any;
-    if (!data) return undefined;
-
-    return new RefreshToken(
-      data.id,
-      data.token,
-      data.userId,
-      data.expiresAt,
-      data.revoked,
-      data.createdAt
-    );
+    if (stmt.step()) {
+      const row = stmt.getAsObject() as any;
+      stmt.free();
+      return new RefreshToken(
+        row.id,
+        row.token,
+        row.userId,
+        row.expiresAt,
+        row.revoked,
+        row.createdAt
+      );
+    }
+    stmt.free();
+    return undefined;
   }
 
   revokeRefreshToken(token: string): void {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    db.run(`
       UPDATE refresh_tokens
       SET revoked = 1
       WHERE token = ?
-    `);
-
-    stmt.run(token);
+    `, [token]);
+    saveDatabase();
   }
 
   revokeAllUserRefreshTokens(userId: number): void {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    db.run(`
       UPDATE refresh_tokens
       SET revoked = 1
       WHERE user_id = ?
-    `);
-
-    stmt.run(userId);
+    `, [userId]);
+    saveDatabase();
   }
 
   deleteExpiredRefreshTokens(): void {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    db.run(`
       DELETE FROM refresh_tokens
       WHERE expires_at < datetime('now')
     `);
-
-    stmt.run();
+    saveDatabase();
   }
 }

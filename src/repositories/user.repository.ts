@@ -1,16 +1,15 @@
-import { getDatabase } from '../shared/database/connection';
+import { getDatabase, saveDatabase } from '../shared/database/connection';
 import { UserDTO } from '../dtos/user/UserDTO';
 import { IUserRepository } from '../interfaces/repositories/IUserRepository';
 
 /**
  * Implementação do Repository de Usuários
- * Implementa IUserRepository
+ * Usa sql.js
  */
 export class UserRepository implements IUserRepository {
-  private db = getDatabase();
-
   findAll(): UserDTO[] {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    const results = db.exec(`
       SELECT 
         id,
         name,
@@ -21,11 +20,19 @@ export class UserRepository implements IUserRepository {
       ORDER BY created_at DESC
     `);
 
-    return stmt.all() as UserDTO[];
+    if (!results.length) return [];
+
+    const columns = results[0].columns;
+    return results[0].values.map(row => {
+      const obj: any = {};
+      columns.forEach((col, i) => obj[col] = row[i]);
+      return obj as UserDTO;
+    });
   }
 
   findById(id: number): UserDTO | undefined {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    const stmt = db.prepare(`
       SELECT 
         id,
         name,
@@ -35,53 +42,55 @@ export class UserRepository implements IUserRepository {
       FROM users
       WHERE id = ?
     `);
+    stmt.bind([id]);
 
-    return stmt.get(id) as UserDTO | undefined;
+    if (stmt.step()) {
+      const row = stmt.getAsObject();
+      stmt.free();
+      return row as unknown as UserDTO;
+    }
+    stmt.free();
+    return undefined;
   }
 
   update(id: number, name: string, email: string, role: string): void {
-    const stmt = this.db.prepare(`
+    const db = getDatabase();
+    db.run(`
       UPDATE users
       SET name = ?, email = ?, role = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `);
-
-    stmt.run(name, email, role, id);
+    `, [name, email, role, id]);
+    saveDatabase();
   }
 
   delete(id: number): void {
-    const stmt = this.db.prepare(`
-      DELETE FROM users WHERE id = ?
-    `);
-
-    stmt.run(id);
+    const db = getDatabase();
+    db.run(`DELETE FROM users WHERE id = ?`, [id]);
+    saveDatabase();
   }
 
   emailExists(email: string, excludeId?: number): boolean {
+    const db = getDatabase();
     let stmt;
-    let result;
-
+    
     if (excludeId) {
-      stmt = this.db.prepare(`
-        SELECT id FROM users WHERE email = ? AND id != ?
-      `);
-      result = stmt.get(email, excludeId);
+      stmt = db.prepare(`SELECT id FROM users WHERE email = ? AND id != ?`);
+      stmt.bind([email, excludeId]);
     } else {
-      stmt = this.db.prepare(`
-        SELECT id FROM users WHERE email = ?
-      `);
-      result = stmt.get(email);
+      stmt = db.prepare(`SELECT id FROM users WHERE email = ?`);
+      stmt.bind([email]);
     }
 
-    return result !== undefined;
+    const exists = stmt.step();
+    stmt.free();
+    return exists;
   }
 
   countAdmins(): number {
-    const stmt = this.db.prepare(`
-      SELECT COUNT(*) as count FROM users WHERE role = 'ADMIN'
-    `);
-
-    const result = stmt.get() as { count: number };
-    return result.count;
+    const db = getDatabase();
+    const results = db.exec(`SELECT COUNT(*) as count FROM users WHERE role = 'ADMIN'`);
+    
+    if (!results.length) return 0;
+    return results[0].values[0][0] as number;
   }
 }
